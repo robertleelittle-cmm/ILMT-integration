@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ibm-license-service-reporter
+  labels:
+    app.kubernetes.io/name: ibm-license-service-reporter
+    app.kubernetes.io/component: license-reporting

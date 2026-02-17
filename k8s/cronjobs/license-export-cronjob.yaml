@@ -1,0 +1,158 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: license-snapshot-export
+  namespace: ibm-licensing
+  labels:
+    app: license-snapshot-export
+spec:
+  # Run monthly on the 1st at 2 AM UTC
+  schedule: "0 2 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: license-snapshot-export
+        spec:
+          serviceAccountName: license-export-sa
+          restartPolicy: OnFailure
+          containers:
+            - name: export
+              image: curlimages/curl:8.5.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "Starting license data export..."
+                  
+                  # Get the current month
+                  MONTH=$(date +%Y-%m)
+                  
+                  # Get the API token from secret
+                  TOKEN=$(cat /var/run/secrets/license-token/token)
+                  
+                  # Export products data
+                  echo "Exporting products data for $MONTH..."
+                  curl -k -H "Authorization: Bearer $TOKEN" \
+                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/products?month=$MONTH" \
+                    -o /data/products-$MONTH.json
+                  
+                  # Export audit snapshot
+                  echo "Exporting audit snapshot for $MONTH..."
+                  curl -k -H "Authorization: Bearer $TOKEN" \
+                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot?month=$MONTH" \
+                    -o /data/audit-snapshot-$MONTH.zip
+                  
+                  # Export bundled products
+                  echo "Exporting bundled products..."
+                  curl -k -H "Authorization: Bearer $TOKEN" \
+                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/bundled_products?month=$MONTH" \
+                    -o /data/bundled-products-$MONTH.json
+                  
+                  echo "Export complete!"
+                  ls -la /data/
+              volumeMounts:
+                - name: license-token
+                  mountPath: /var/run/secrets/license-token
+                  readOnly: true
+                - name: export-data
+                  mountPath: /data
+          volumes:
+            - name: license-token
+              secret:
+                secretName: ibm-licensing-token
+            - name: export-data
+              persistentVolumeClaim:
+                claimName: license-export-pvc
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: license-export-sa
+  namespace: ibm-licensing
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: license-export-pvc
+  namespace: ibm-licensing
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Quarterly audit snapshot job (runs at start of each quarter)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: quarterly-audit-snapshot
+  namespace: ibm-licensing
+  labels:
+    app: quarterly-audit-snapshot
+spec:
+  # Run quarterly: Jan 1, Apr 1, Jul 1, Oct 1 at 3 AM UTC
+  schedule: "0 3 1 1,4,7,10 *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: quarterly-audit-snapshot
+        spec:
+          serviceAccountName: license-export-sa
+          restartPolicy: OnFailure
+          containers:
+            - name: quarterly-export
+              image: curlimages/curl:8.5.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "=== IBM License Quarterly Audit Snapshot ==="
+                  
+                  # Calculate previous quarter
+                  YEAR=$(date +%Y)
+                  MONTH=$(date +%m)
+                  
+                  case $MONTH in
+                    01) QUARTER="Q4"; QYEAR=$((YEAR-1));;
+                    04) QUARTER="Q1"; QYEAR=$YEAR;;
+                    07) QUARTER="Q2"; QYEAR=$YEAR;;
+                    10) QUARTER="Q3"; QYEAR=$YEAR;;
+                  esac
+                  
+                  echo "Generating audit snapshot for $QUARTER $QYEAR"
+                  
+                  TOKEN=$(cat /var/run/secrets/license-token/token)
+                  
+                  # Get quarterly snapshot
+                  curl -k -H "Authorization: Bearer $TOKEN" \
+                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot" \
+                    -o /data/AUDIT-${QYEAR}-${QUARTER}.zip
+                  
+                  echo "Quarterly audit snapshot saved: AUDIT-${QYEAR}-${QUARTER}.zip"
+                  echo "=== Audit snapshot complete ==="
+              volumeMounts:
+                - name: license-token
+                  mountPath: /var/run/secrets/license-token
+                  readOnly: true
+                - name: export-data
+                  mountPath: /data
+          volumes:
+            - name: license-token
+              secret:
+                secretName: ibm-licensing-token
+            - name: export-data
+              persistentVolumeClaim:
+                claimName: license-export-pvc

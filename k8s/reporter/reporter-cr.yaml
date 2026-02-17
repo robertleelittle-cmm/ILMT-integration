@@ -1,0 +1,43 @@
+apiVersion: operator.ibm.com/v1alpha1
+kind: IBMLicenseServiceReporter
+metadata:
+  name: ibm-license-service-reporter
+  namespace: ibm-license-service-reporter
+spec:
+  license:
+    accept: true
+  # Database configuration for storing license data
+  databaseContainer:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  # Reporter container configuration
+  reporterContainer:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  # Receiver settings for incoming data from License Service instances
+  receiverContainer:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+  # HTTPS configuration
+  httpsEnable: true
+  # Storage configuration
+  storage:
+    # Persistent volume for storing historical data
+    enabled: true
+    storageClass: "" # Use default storage class
+    size: 10Gi
