@@ -29,9 +29,28 @@ This project provides:
 
 ### 1. Prerequisites
 
-- Kubernetes cluster with IBM License Service installed
+- Kubernetes cluster with IBM License Service Operator installed
 - `kubectl` configured with cluster access
 - Python 3.9+ (for export scripts)
+- **IBM Entitlement Key** (required for pulling IBM container images)
+
+### 2. Obtain IBM Entitlement Key
+
+**REQUIRED**: You must have a valid IBM Entitlement Key to pull IBM License Service images.
+
+1. Log in to [IBM Container Library](https://myibm.ibm.com/products-services/containerlibrary)
+2. Copy your entitlement key
+3. Create the secret in your cluster:
+
+```bash
+kubectl create secret docker-registry ibm-entitlement-key \
+  --docker-server=icr.io \
+  --docker-username=cp \
+  --docker-password=<YOUR_ENTITLEMENT_KEY> \
+  -n ibm-licensing
+```
+
+**Note**: Store your entitlement key securely. Never commit it to version control.
 
 ### 2. Deploy License Service Reporter
 

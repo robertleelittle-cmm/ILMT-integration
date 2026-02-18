@@ -60,7 +60,7 @@ sleep 3
 
 # Export products data
 log_info "Exporting products data..."
-curl -sk -H "Authorization: Bearer $TOKEN" \
+curl -s -H "Authorization: Bearer $TOKEN" \
     "http://localhost:$PORT/products?month=$MONTH" \
     -o "$OUTPUT_DIR/products-$MONTH.json"
 
