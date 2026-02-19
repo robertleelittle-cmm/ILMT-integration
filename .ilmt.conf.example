@@ -1,0 +1,68 @@
+# ILMT Push Configuration Template
+#
+# Copy this file to .ilmt.conf and customize for your environment
+# Then source it before running push-to-ilmt.sh:
+#   source .ilmt.conf && ./scripts/push-to-ilmt.sh
+#
+# IMPORTANT: Add .ilmt.conf to .gitignore to protect credentials
+
+# =============================================================================
+# ILMT Server Configuration
+# =============================================================================
+
+# ILMT server hostname or IP
+export ILMT_SERVER="ilmt.example.com"
+
+# Upload method: api, scp, sftp, or manual
+# - api:    REST API upload (requires ILMT 9.x+)
+# - scp:    Secure copy to ILMT import directory
+# - sftp:   SFTP upload to ILMT import directory
+# - manual: Export and transform only, provide instructions
+export ILMT_METHOD="scp"
+
+# =============================================================================
+# API Method Settings (if ILMT_METHOD=api)
+# =============================================================================
+
+export ILMT_API_URL="https://${ILMT_SERVER}:9081/api/sam/v2"
+export ILMT_API_USER="admin"
+
+# IMPORTANT: Store token securely, do not commit to git
+# Generate token via: ilmt-cli generate-api-token
+export ILMT_API_TOKEN="your-api-token-here"
+
+# =============================================================================
+# SCP/SFTP Method Settings (if ILMT_METHOD=scp or sftp)
+# =============================================================================
+
+# SSH username for ILMT server
+export ILMT_SSH_USER="root"
+
+# ILMT import directory (default for ILMT 9.x)
+# Common paths:
+#   - /var/opt/BESClient/LMT/CIT (ILMT 9.x)
+#   - /opt/ibm/LMT/import (older versions)
+export ILMT_IMPORT_DIR="/var/opt/BESClient/LMT/CIT"
+
+# Path to SSH private key
+export ILMT_SSH_KEY="$HOME/.ssh/id_rsa_ilmt"
+
+# =============================================================================
+# License Service Configuration
+# =============================================================================
+
+export LICENSE_SERVICE_NAMESPACE="ibm-licensing"
+
+# Use http://localhost:8080 for port-forwarding (default)
+# Use http://ibm-licensing-service-instance.ibm-licensing.svc:8080 for in-cluster
+export LICENSE_SERVICE_URL="http://localhost:8080"
+
+# =============================================================================
+# Local Paths
+# =============================================================================
+
+# Directory for exported license data
+export EXPORT_DIR="$HOME/ilmt-exports"
+
+# Archive directory for audit snapshots (2 year retention required)
+export ARCHIVE_DIR="$HOME/Documents/IBM-License-Audits"

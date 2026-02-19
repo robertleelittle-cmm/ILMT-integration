@@ -38,20 +38,20 @@ spec:
                   
                   # Export products data
                   echo "Exporting products data for $MONTH..."
-                  curl -k -H "Authorization: Bearer $TOKEN" \
-                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/products?month=$MONTH" \
+                  curl -H "Authorization: Bearer $TOKEN" \
+                    "http://ibm-licensing-service-instance.ibm-licensing.svc:8080/products?month=$MONTH" \
                     -o /data/products-$MONTH.json
                   
                   # Export audit snapshot
                   echo "Exporting audit snapshot for $MONTH..."
-                  curl -k -H "Authorization: Bearer $TOKEN" \
-                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot?month=$MONTH" \
+                  curl -H "Authorization: Bearer $TOKEN" \
+                    "http://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot?month=$MONTH" \
                     -o /data/audit-snapshot-$MONTH.zip
                   
                   # Export bundled products
                   echo "Exporting bundled products..."
-                  curl -k -H "Authorization: Bearer $TOKEN" \
-                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/bundled_products?month=$MONTH" \
+                  curl -H "Authorization: Bearer $TOKEN" \
+                    "http://ibm-licensing-service-instance.ibm-licensing.svc:8080/bundled_products?month=$MONTH" \
                     -o /data/bundled-products-$MONTH.json
                   
                   echo "Export complete!"
@@ -137,8 +137,8 @@ spec:
                   TOKEN=$(cat /var/run/secrets/license-token/token)
                   
                   # Get quarterly snapshot
-                  curl -k -H "Authorization: Bearer $TOKEN" \
-                    "https://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot" \
+                  curl -H "Authorization: Bearer $TOKEN" \
+                    "http://ibm-licensing-service-instance.ibm-licensing.svc:8080/snapshot" \
                     -o /data/AUDIT-${QYEAR}-${QUARTER}.zip
                   
                   echo "Quarterly audit snapshot saved: AUDIT-${QYEAR}-${QUARTER}.zip"

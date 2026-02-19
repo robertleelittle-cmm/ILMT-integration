@@ -15,6 +15,6 @@ spec:
     reporterSecretToken: ibm-licensing-reporter-token
   # Existing configuration preserved
   datasource: datacollector
-  httpsEnable: true
+  httpsEnable: false
   license:
     accept: true

@@ -32,10 +32,10 @@ log_info "Output Directory: $OUTPUT_DIR"
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Get API token
+# Get API token (use service account token for API authentication)
 log_info "Retrieving API token..."
-TOKEN=$(kubectl get secret ibm-licensing-token -n "$LICENSE_SERVICE_NAMESPACE" \
-    -o jsonpath='{.data.token}' | base64 -d)
+TOKEN=$(kubectl get secret ibm-licensing-default-reader-token -n "$LICENSE_SERVICE_NAMESPACE" \
+    -o jsonpath='{.data.token}' | base64 -d | tr -d '\n')
 
 if [ -z "$TOKEN" ]; then
     log_error "Failed to retrieve API token"
@@ -58,29 +58,45 @@ trap cleanup EXIT
 # Wait for port-forward to be ready
 sleep 3
 
+# Base URL - uses HTTP since HTTPS_ENABLE is false in our config
+BASE_URL="${LICENSE_SERVICE_URL:-http://localhost:$PORT}"
+
 # Export products data
 log_info "Exporting products data..."
-curl -s -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:$PORT/products?month=$MONTH" \
-    -o "$OUTPUT_DIR/products-$MONTH.json"
+if ! curl -sSfk \
+    -H "Authorization: Bearer $TOKEN" \
+    "$BASE_URL/products?month=$MONTH" \
+    -o "$OUTPUT_DIR/products-$MONTH.json"; then
+    log_error "Failed to export products data. Check if License Service is running and accessible."
+    exit 1
+fi
 
 # Export audit snapshot
 log_info "Exporting audit snapshot..."
-curl -sk -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:$PORT/snapshot?month=$MONTH" \
-    -o "$OUTPUT_DIR/audit-snapshot-$MONTH.zip"
+if ! curl -sSfk \
+    -H "Authorization: Bearer $TOKEN" \
+    "$BASE_URL/snapshot?month=$MONTH" \
+    -o "$OUTPUT_DIR/audit-snapshot-$MONTH.zip"; then
+    log_error "Failed to export audit snapshot"
+    exit 1
+fi
 
 # Export bundled products
 log_info "Exporting bundled products..."
-curl -sk -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:$PORT/bundled_products?month=$MONTH" \
+curl -sSfk \
+    -H "Authorization: Bearer $TOKEN" \
+    "$BASE_URL/bundled_products?month=$MONTH" \
     -o "$OUTPUT_DIR/bundled-products-$MONTH.json" 2>/dev/null || log_warn "No bundled products data"
 
 # Export product metrics summary
 log_info "Exporting product metrics..."
-curl -sk -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:$PORT/products" \
-    -o "$OUTPUT_DIR/all-products.json"
+if ! curl -sSfk \
+    -H "Authorization: Bearer $TOKEN" \
+    "$BASE_URL/products" \
+    -o "$OUTPUT_DIR/all-products.json"; then
+    log_error "Failed to export product metrics"
+    exit 1
+fi
 
 log_info "Export complete!"
 log_info "Files saved to: $OUTPUT_DIR"

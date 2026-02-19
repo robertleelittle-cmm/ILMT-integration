@@ -52,10 +52,10 @@ echo ""
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Get API token
+# Get API token (use service account token for API authentication)
 log_step "1/5 Retrieving API token..."
-TOKEN=$(kubectl get secret ibm-licensing-token -n "$LICENSE_SERVICE_NAMESPACE" \
-    -o jsonpath='{.data.token}' | base64 -d)
+TOKEN=$(kubectl get secret ibm-licensing-default-reader-token -n "$LICENSE_SERVICE_NAMESPACE" \
+    -o jsonpath='{.data.token}' | base64 -d | tr -d '\n')
 
 if [ -z "$TOKEN" ]; then
     log_error "Failed to retrieve API token"

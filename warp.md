@@ -33,7 +33,8 @@ ilmt-integration/
 ├── scripts/
 │   ├── setup.sh            # Initial setup script
 │   ├── export-license-data.sh
-│   └── generate-audit-snapshot.sh
+│   ├── generate-audit-snapshot.sh
+│   └── push-to-ilmt.sh     # Automated push to ILMT server
 ├── python/
 │   └── transform_to_ilmt.py
 └── tools/
@@ -52,12 +53,18 @@ ilmt-integration/
 ./tools/verify-compliance.sh
 ```
 
-### Export License Data
+### Export and Push to ILMT (Recommended)
+```bash
+# Automated export, transform, and push to ILMT
+./scripts/push-to-ilmt.sh [YYYY-MM]
+```
+
+### Export License Data (Manual)
 ```bash
 ./scripts/export-license-data.sh [YYYY-MM] [output-dir]
 ```
 
-### Generate Audit Snapshot
+### Generate Audit Snapshot (Manual)
 ```bash
 ./scripts/generate-audit-snapshot.sh
 ```
@@ -85,6 +92,79 @@ metadata:
 3. **Retention**: Keep audit snapshots for 2 years
 4. **Impact**: Without License Service, ALL cluster vCPUs must be licensed
 
+## ILMT Server Configuration
+
+### Kubernetes-Based ILMT (Current Setup)
+The ILMT server is deployed as a containerized application in Kubernetes:
+
+- **Namespace**: `ilmt-test`
+- **Server Pod**: Auto-detected (e.g., `ilmt-test-server-*`)
+- **Database Pod**: `ilmt-test-db2-*`
+- **Import Directory**: `/datasource` (mounted volume)
+- **Web Interface**: `https://ilmt.rlittle-bamoe.kat.cmmaz.cloud:9081`
+
+#### Push Method Configuration
+
+The `push-to-ilmt.sh` script supports multiple methods:
+
+**1. Kubernetes (Default - Recommended)**
+```bash
+# Uses kubectl cp to copy files directly to ILMT pod
+ILMT_METHOD=kubectl ./scripts/push-to-ilmt.sh
+```
+
+**2. SSH/SCP (Traditional ILMT installations)**
+```bash
+# For VM-based ILMT deployments
+ILMT_METHOD=scp \
+ILMT_SERVER=ilmt.example.com \
+ILMT_SSH_USER=ilmtadmin \
+./scripts/push-to-ilmt.sh
+```
+
+**3. SFTP**
+```bash
+ILMT_METHOD=sftp ./scripts/push-to-ilmt.sh
+```
+
+**4. REST API**
+```bash
+ILMT_METHOD=api \
+ILMT_API_TOKEN=your_token \
+./scripts/push-to-ilmt.sh
+```
+
+**5. Manual**
+```bash
+ILMT_METHOD=manual ./scripts/push-to-ilmt.sh
+```
+
+#### Environment Variables
+
+**Kubernetes Method:**
+- `ILMT_K8S_NAMESPACE`: ILMT namespace (default: `ilmt-test`)
+- `ILMT_K8S_POD`: Pod name (auto-detected if not set)
+- `ILMT_K8S_IMPORT_DIR`: Import directory in pod (default: `/datasource`)
+
+**SSH/SCP/SFTP Methods:**
+- `ILMT_SERVER`: ILMT server hostname
+- `ILMT_SSH_USER`: SSH username (default: `ilmtadmin`)
+- `ILMT_SSH_KEY`: Path to SSH private key (auto-detected)
+- `ILMT_IMPORT_DIR`: Import directory (default: `/var/opt/BESClient/LMT/CIT`)
+
+#### Verifying ILMT Pod and Import Directory
+
+```bash
+# Find ILMT pods
+kubectl get pods -n ilmt-test
+
+# Check import directory contents
+kubectl exec -n ilmt-test <pod-name> -- ls -lh /datasource
+
+# View ILMT logs
+kubectl logs -n ilmt-test <pod-name> --tail=50
+```
+
 ## Related Projects
 - **ibm-license-service**: Parent project with License Service deployment configs
 - **ILMT-INTEGRATION-GUIDE.md**: Detailed integration documentation
@@ -108,3 +188,129 @@ If HTTPS is enabled but certificates aren't configured, the service will fail to
 ```bash
 kubectl patch configmap ibm-licensing-config -n ibm-licensing --type=merge -p '{"data":{"HTTPS_ENABLE":"false"}}'
 ```
+
+**Note**: The export scripts use HTTP by default since `HTTPS_ENABLE` is set to `false` in our configuration. If you enable HTTPS, set the `LICENSE_SERVICE_URL` environment variable:
+```bash
+LICENSE_SERVICE_URL=https://localhost:8080 ./scripts/export-license-data.sh
+```
+
+### Service Port Mismatch
+If the export script returns 404 errors but the License Service pod is running, check for a port mismatch between the Service and container:
+```bash
+# Check service targetPort
+kubectl get svc -n ibm-licensing ibm-licensing-service-instance -o jsonpath='{.spec.ports[0].targetPort}'
+
+# Check container port
+kubectl get pod -n ibm-licensing -l app=ibm-licensing-service-instance -o jsonpath='{.items[0].spec.containers[0].ports[0].containerPort}'
+```
+
+If they don't match (e.g., service targets 8081 but container exposes 8080), fix with:
+```bash
+kubectl patch svc ibm-licensing-service-instance -n ibm-licensing --type='json' \
+  -p='[{"op": "replace", "path": "/spec/ports/0/targetPort", "value": 8080}]'
+```
+
+### Port-Forward Status
+The export scripts use `kubectl port-forward` to access the License Service API. The port-forward is automatically created and terminated by the script. To check for stuck port-forwards:
+```bash
+# Check for running port-forwards
+ps aux | grep "kubectl port-forward" | grep -v grep
+
+# Kill stuck port-forwards if needed
+killall kubectl
+```
+
+### ILMT Import Issues
+If files are copied to the ILMT pod but don't appear in the import interface:
+
+1. **Verify files in pod:**
+   ```bash
+   kubectl exec -n ilmt-test <pod-name> -- ls -lh /datasource
+   ```
+
+2. **Check ILMT logs for errors:**
+   ```bash
+   kubectl logs -n ilmt-test <pod-name> --tail=100
+   ```
+
+3. **Verify file permissions:**
+   ```bash
+   kubectl exec -n ilmt-test <pod-name> -- chmod 644 /datasource/*.csv
+   ```
+
+4. **Restart ILMT to trigger import scan:**
+   ```bash
+   kubectl rollout restart deployment/ilmt-test-server -n ilmt-test
+   ```
+
+### License Service Reporter Operator Issues
+
+If the `ibm-license-service-reporter-operator` pod is in `CrashLoopBackOff`:
+
+**Symptoms:**
+```bash
+kubectl get pods -A | grep reporter-operator
+# Shows: CrashLoopBackOff with errors about forbidden permissions
+```
+
+**Cause:** Missing ClusterRole and ClusterRoleBinding for the operator service account.
+
+**Fix:**
+
+1. **Create ClusterRole:**
+   ```bash
+   kubectl apply -f - <<EOF
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRole
+   metadata:
+     name: ibm-license-service-reporter-operator
+   rules:
+   - apiGroups: ["operator.ibm.com"]
+     resources: ["ibmlicenseservicereporters", "ibmlicenseservicereporters/status", "ibmlicenseservicereporters/finalizers"]
+     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+   - apiGroups: [""]
+     resources: ["configmaps", "secrets", "services", "serviceaccounts", "persistentvolumeclaims"]
+     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+   - apiGroups: ["apps"]
+     resources: ["deployments", "statefulsets"]
+     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+   - apiGroups: ["networking.k8s.io"]
+     resources: ["ingresses", "networkpolicies"]
+     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+   - apiGroups: ["coordination.k8s.io"]
+     resources: ["leases"]
+     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+   EOF
+   ```
+
+2. **Create ClusterRoleBinding:**
+   ```bash
+   kubectl apply -f - <<EOF
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRoleBinding
+   metadata:
+     name: ibm-license-service-reporter-operator
+   roleRef:
+     apiGroup: rbac.authorization.k8s.io
+     kind: ClusterRole
+     name: ibm-license-service-reporter-operator
+   subjects:
+   - kind: ServiceAccount
+     name: ibm-license-service-reporter-operator
+     namespace: default
+   EOF
+   ```
+
+3. **Restart the operator pod:**
+   ```bash
+   kubectl delete pod -n default -l control-plane=ibm-license-service-reporter-operator
+   ```
+
+4. **Verify it's running:**
+   ```bash
+   kubectl get pods -n default | grep reporter-operator
+   # Should show: Running (1/1)
+   
+   kubectl logs -n default -l control-plane=ibm-license-service-reporter-operator --tail=10
+   # Should show: "successfully acquired lease" and "Starting Controller"
+   ```

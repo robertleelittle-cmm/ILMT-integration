@@ -17,8 +17,23 @@ from pathlib import Path
 
 def load_license_data(input_file: str) -> dict:
     """Load license data from JSON file."""
-    with open(input_file, 'r') as f:
-        return json.load(f)
+    try:
+        with open(input_file, 'r') as f:
+            content = f.read().strip()
+            if not content:
+                print(f"Warning: Input file {input_file} is empty.")
+                return {"products": []}
+            data = json.loads(content)
+            # Handle both list format (direct from API) and dict format
+            if isinstance(data, list):
+                return {"products": data}
+            return data
+    except json.JSONDecodeError as e:
+        print(f"Error: Failed to decode JSON from {input_file}: {e}")
+        return {"products": []}
+    except FileNotFoundError:
+        print(f"Error: File not found: {input_file}")
+        sys.exit(1)
 
 
 def transform_to_ilmt_csv(license_data: dict, output_file: str, report_date: str = None):
