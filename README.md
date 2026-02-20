@@ -96,29 +96,6 @@ kubectl apply -f k8s/cronjobs/
 kubectl get cronjobs -n ibm-licensing
 ```
 
-## Directory Structure
-
-```
-ilmt-integration/
-├── k8s/
-│   ├── reporter/           # License Service Reporter manifests
-│   │   ├── namespace.yaml
-│   │   ├── reporter-deployment.yaml
-│   │   └── ibm-licensing-sender-config.yaml
-│   └── cronjobs/           # Automated reporting jobs
-│       └── license-export-cronjob.yaml
-├── scripts/
-│   ├── export-license-data.sh      # Export from License Service
-│   ├── generate-audit-snapshot.sh  # Generate compliance snapshot
-│   ├── push-to-ilmt.sh             # Export, transform, and push to ILMT
-│   └── archive-snapshots.sh
-├── python/
-│   ├── requirements.txt
-│   ├── transform_to_ilmt.py        # Transform to ILMT CSV format
-│   └── license_reporter.py
-└── tools/
-    └── verify-compliance.sh
-```
 
 ## Configuration
 
