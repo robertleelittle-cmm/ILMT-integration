@@ -23,7 +23,7 @@ echo "========================================"
 echo ""
 
 # Check for IBM Entitlement Key
-log_step "1/5 Checking IBM Entitlement Key..."
+log_step "1/6 Checking IBM Entitlement Key..."
 
 if kubectl get secret ibm-entitlement-key -n ibm-licensing &>/dev/null; then
     log_info "IBM Entitlement Key secret already exists"
@@ -62,7 +62,7 @@ else
 fi
 
 # Check for License Service Operator
-log_step "2/5 Checking License Service Operator..."
+log_step "2/6 Checking License Service Operator..."
 
 if kubectl get deployment -n ibm-licensing -l app.kubernetes.io/name=ibm-licensing -o name &>/dev/null; then
     log_info "License Service Operator found"
@@ -74,7 +74,7 @@ else
 fi
 
 # Check for IBMLicensing CR
-log_step "3/5 Checking IBMLicensing instance..."
+log_step "3/6 Checking IBMLicensing instance..."
 
 if kubectl get ibmlicensing instance -n ibm-licensing &>/dev/null; then
     log_info "IBMLicensing instance found"
@@ -101,7 +101,7 @@ EOF
 fi
 
 # Wait for License Service to be ready
-log_step "4/5 Waiting for License Service to be ready..."
+log_step "4/6 Waiting for License Service to be ready..."
 
 TIMEOUT=120
 ELAPSED=0
@@ -122,13 +122,21 @@ if [ $ELAPSED -ge $TIMEOUT ]; then
 fi
 
 # Create API token secret if needed
-log_step "5/5 Verifying API token..."
+log_step "5/6 Verifying API token..."
 
 if kubectl get secret ibm-licensing-token -n ibm-licensing &>/dev/null; then
     log_info "API token secret exists"
 else
     log_warn "API token secret not found - will be created by operator"
 fi
+
+# Create service account token secret (required for Kubernetes 1.24+)
+log_step "6/6 Creating service account token secret..."
+
+# Source the token management script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/ensure-token-secret.sh"
+ensure_token_secret
 
 echo ""
 echo "========================================"

@@ -50,8 +50,9 @@ if [[ -z "$ILMT_SSH_KEY" ]]; then
 fi
 
 # License Service Configuration
-LICENSE_SERVICE_URL="${LICENSE_SERVICE_URL:-http://localhost:8080}"
+LICENSE_SERVICE_URL="${LICENSE_SERVICE_URL:-http://localhost:8090}"
 LICENSE_SERVICE_NAMESPACE="${LICENSE_SERVICE_NAMESPACE:-ibm-licensing}"
+PORT="${PORT:-8090}"
 
 # Local paths
 EXPORT_DIR="${EXPORT_DIR:-$HOME/ilmt-exports}"
@@ -90,6 +91,10 @@ check_dependencies() {
 
 get_api_token() {
     log "Retrieving License Service API token..." >&2
+    
+    # Ensure token secret exists (Kubernetes 1.24+ doesn't auto-create service account tokens)
+    "$SCRIPT_DIR/ensure-token-secret.sh" >&2
+    
     # Use the service account token for API authentication
     local encoded
     encoded=$(kubectl get secret ibm-licensing-default-reader-token \
@@ -112,7 +117,7 @@ export_license_data() {
     # Port forward to License Service
     log "Setting up port-forward to License Service..."
     kubectl port-forward -n "$LICENSE_SERVICE_NAMESPACE" \
-        svc/ibm-licensing-service-instance 8080:8080 &
+        svc/ibm-licensing-service-instance "$PORT:8080" &
     local pf_pid=$!
     sleep 3
     

@@ -8,7 +8,7 @@ set -euo pipefail
 LICENSE_SERVICE_NAMESPACE="${LICENSE_SERVICE_NAMESPACE:-ibm-licensing}"
 LICENSE_SERVICE_NAME="${LICENSE_SERVICE_NAME:-ibm-licensing-service-instance}"
 ARCHIVE_PATH="${ARCHIVE_PATH:-$HOME/Documents/IBM-License-Audits}"
-PORT="${PORT:-8080}"
+PORT="${PORT:-8090}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -34,6 +34,12 @@ mkdir -p "$OUTPUT_DIR"
 
 # Get API token (use service account token for API authentication)
 log_info "Retrieving API token..."
+
+# Ensure token secret exists (Kubernetes 1.24+ doesn't auto-create service account tokens)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/ensure-token-secret.sh"
+ensure_token_secret
+
 TOKEN=$(kubectl get secret ibm-licensing-default-reader-token -n "$LICENSE_SERVICE_NAMESPACE" \
     -o jsonpath='{.data.token}' | base64 -d | tr -d '\n')
 

@@ -32,6 +32,7 @@ ilmt-integration/
 │   └── cronjobs/           # Automated reporting CronJobs
 ├── scripts/
 │   ├── setup.sh            # Initial setup script
+│   ├── ensure-token-secret.sh  # Token management for K8s 1.24+
 │   ├── export-license-data.sh
 │   ├── generate-audit-snapshot.sh
 │   └── push-to-ilmt.sh     # Automated push to ILMT server
@@ -178,10 +179,32 @@ kubectl get secret ibm-entitlement-key -n ibm-licensing
 ```
 
 ### API Token Issues
-The License Service API requires authentication. Token is stored in:
+The License Service API requires authentication. Two types of tokens are needed:
+
+1. **Service Account Token** (for API authentication):
+```bash
+# Required for Kubernetes 1.24+ where service account tokens aren't auto-created
+kubectl get secret ibm-licensing-default-reader-token -n ibm-licensing
+
+# If missing, create it:
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ibm-licensing-default-reader-token
+  namespace: ibm-licensing
+  annotations:
+    kubernetes.io/service-account.name: ibm-licensing-service
+type: kubernetes.io/service-account-token
+EOF
+```
+
+2. **License Service Token**:
 ```bash
 kubectl get secret ibm-licensing-token -n ibm-licensing
 ```
+
+**Note**: Starting with Kubernetes 1.24, service account tokens are no longer automatically created. The scripts now include automatic token creation via `ensure-token-secret.sh`.
 
 ### HTTPS Issues
 If HTTPS is enabled but certificates aren't configured, the service will fail to start. Either configure certificates or disable HTTPS:
@@ -191,7 +214,7 @@ kubectl patch configmap ibm-licensing-config -n ibm-licensing --type=merge -p '{
 
 **Note**: The export scripts use HTTP by default since `HTTPS_ENABLE` is set to `false` in our configuration. If you enable HTTPS, set the `LICENSE_SERVICE_URL` environment variable:
 ```bash
-LICENSE_SERVICE_URL=https://localhost:8080 ./scripts/export-license-data.sh
+LICENSE_SERVICE_URL=https://localhost:8090 ./scripts/export-license-data.sh
 ```
 
 ### Service Port Mismatch
@@ -210,11 +233,26 @@ kubectl patch svc ibm-licensing-service-instance -n ibm-licensing --type='json' 
   -p='[{"op": "replace", "path": "/spec/ports/0/targetPort", "value": 8080}]'
 ```
 
+### Port Configuration and Conflicts
+
+**Default Port Change**: The scripts now use port **8090** by default (instead of 8080) to avoid conflicts with common development services.
+
+To use a different port:
+```bash
+# Set custom port for all scripts
+PORT=8091 ./scripts/export-license-data.sh
+PORT=8091 ./scripts/generate-audit-snapshot.sh
+PORT=8091 ./scripts/push-to-ilmt.sh
+```
+
 ### Port-Forward Status
 The export scripts use `kubectl port-forward` to access the License Service API. The port-forward is automatically created and terminated by the script. To check for stuck port-forwards:
 ```bash
 # Check for running port-forwards
-ps aux | grep "kubectl port-forward" | grep -v grep
+ps aux | grep 'kubectl port-forward' | grep -v grep
+
+# Check what's using a specific port
+lsof -i :8090
 
 # Kill stuck port-forwards if needed
 killall kubectl
