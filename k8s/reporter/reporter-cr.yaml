@@ -6,6 +6,8 @@ metadata:
 spec:
   license:
     accept: true
+  imagePullSecrets:
+  - ibm-entitlement-key
   # Database configuration for storing license data
   databaseContainer:
     resources:
@@ -34,10 +36,10 @@ spec:
         cpu: 200m
         memory: 256Mi
   # HTTPS configuration
-  httpsEnable: true
+  httpsEnable: false
   # Storage configuration
   storage:
     # Persistent volume for storing historical data
     enabled: true
-    storageClass: "" # Use default storage class
+    storageClass: "default"
     size: 10Gi

@@ -71,7 +71,7 @@ BASE_URL="${LICENSE_SERVICE_URL:-http://localhost:$PORT}"
 log_info "Exporting products data..."
 if ! curl -sSfk \
     -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/products?month=$MONTH" \
+    "$BASE_URL/products" \
     -o "$OUTPUT_DIR/products-$MONTH.json"; then
     log_error "Failed to export products data. Check if License Service is running and accessible."
     exit 1
@@ -81,18 +81,18 @@ fi
 log_info "Exporting audit snapshot..."
 if ! curl -sSfk \
     -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/snapshot?month=$MONTH" \
+    "$BASE_URL/snapshot" \
     -o "$OUTPUT_DIR/audit-snapshot-$MONTH.zip"; then
     log_error "Failed to export audit snapshot"
     exit 1
 fi
 
-# Export bundled products
+# Export bundled products (may not exist in all versions)
 log_info "Exporting bundled products..."
 curl -sSfk \
     -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/bundled_products?month=$MONTH" \
-    -o "$OUTPUT_DIR/bundled-products-$MONTH.json" 2>/dev/null || log_warn "No bundled products data"
+    "$BASE_URL/bundled_products" \
+    -o "$OUTPUT_DIR/bundled-products-$MONTH.json" 2>/dev/null || log_warn "No bundled products data available"
 
 # Export product metrics summary
 log_info "Exporting product metrics..."

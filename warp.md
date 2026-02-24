@@ -31,11 +31,13 @@ ilmt-integration/
 │   ├── reporter/           # License Service Reporter manifests
 │   └── cronjobs/           # Automated reporting CronJobs
 ├── scripts/
-│   ├── setup.sh            # Initial setup script
-│   ├── ensure-token-secret.sh  # Token management for K8s 1.24+
-│   ├── export-license-data.sh
+│   ├── setup.sh                 # Initial setup script
+│   ├── ensure-token-secret.sh   # Token management for K8s 1.24+
+│   ├── export-license-data.sh   # Export license data
 │   ├── generate-audit-snapshot.sh
-│   └── push-to-ilmt.sh     # Automated push to ILMT server
+│   ├── push-to-ilmt.sh          # Automated push to ILMT server
+│   ├── start-license-reporter.sh # Deploy License Service Reporter
+│   └── check-reporter-status.sh  # Check Reporter health
 ├── python/
 │   └── transform_to_ilmt.py
 └── tools/

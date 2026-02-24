@@ -1,5 +1,8 @@
 # IBM License Service - ILMT Integration
 
+> **⚠️ EXPERIMENTAL PROJECT**  
+> This is an experimental project intended as a starting point for future development. The scripts and configurations provided are not production-ready and should be thoroughly tested and customized for your specific environment before use in production.
+
 Automated tooling for IBM License Metric Tool (ILMT) integration with IBM License Service on Kubernetes.
 
 ## Overview
@@ -53,24 +56,38 @@ kubectl create secret docker-registry ibm-entitlement-key \
 
 **Note**: Store your entitlement key securely. Never commit it to version control.
 
-### 2. Deploy License Service Reporter
+### 2. Deploy IBM License Service
 
 ```bash
-# Deploy the reporter
-kubectl apply -f k8s/reporter/
+# Run the setup script to deploy License Service
+./scripts/setup.sh
 
 # Verify deployment
-kubectl get pods -n ibm-license-service-reporter
+kubectl get pods -n ibm-licensing
 ```
 
-### 3. Configure License Service to Send Data
+### 3. Deploy License Service Reporter (Optional - Experimental)
+
+> **Note**: The Reporter component is currently experimental and may not deploy correctly in all environments. You can use the export scripts as an alternative.
 
 ```bash
-# Apply sender configuration
-kubectl apply -f k8s/reporter/ibm-licensing-sender-config.yaml
+# Attempt to deploy the reporter
+./scripts/start-license-reporter.sh
+
+# Check reporter status
+./scripts/check-reporter-status.sh
 ```
 
-### 4. Export and Push License Data to ILMT
+### 4. Generate Audit Snapshots
+
+```bash
+# Generate quarterly audit snapshot (recommended)
+./scripts/generate-audit-snapshot.sh
+
+# Files are saved to ~/Documents/IBM-License-Audits/
+```
+
+### 5. Export and Push License Data to ILMT (Advanced)
 
 ```bash
 # Run the automated export and push script
@@ -86,7 +103,7 @@ The script will:
 3. Archive the audit snapshot
 4. Push to your ILMT server (via kubectl, SCP, SFTP, or API)
 
-### 5. Set Up Automated Reporting (Optional)
+### 6. Set Up Automated Reporting (Optional - Experimental)
 
 ```bash
 # Create the reporting CronJob for scheduled exports
@@ -96,6 +113,19 @@ kubectl apply -f k8s/cronjobs/
 kubectl get cronjobs -n ibm-licensing
 ```
 
+
+## Scripts Overview
+
+| Script | Purpose | Status |
+|--------|---------|--------|
+| `setup.sh` | Initial License Service setup | ✅ Working |
+| `ensure-token-secret.sh` | Handles K8s 1.24+ token creation | ✅ Working |
+| `generate-audit-snapshot.sh` | Creates quarterly audit snapshots | ✅ Working |
+| `export-license-data.sh` | Exports monthly license data | ⚠️ Experimental - API endpoints may vary |
+| `push-to-ilmt.sh` | Automated ILMT integration | ⚠️ Experimental - Test in your environment |
+| `start-license-reporter.sh` | Deploys Reporter component | ❌ Known issues - Operator not creating pods |
+| `check-reporter-status.sh` | Checks Reporter health | ✅ Working |
+| `verify-compliance.sh` | Verifies IBM compliance | ✅ Working |
 
 ## Configuration
 
@@ -168,6 +198,16 @@ ILMT_SSH_USER=root \
 - Without License Service: All cluster vCPUs must be licensed
 - With License Service: Only container CPU limits are counted
 - The `push-to-ilmt.sh` script automatically archives snapshots to `~/Documents/IBM-License-Audits`
+
+## Known Issues & Limitations
+
+1. **License Service Reporter**: The Reporter operator (v4.2.19) may not create pods correctly when deployed manually. Consider using OLM or the export scripts as alternatives.
+
+2. **Port Conflicts**: Scripts use port 8090 by default to avoid conflicts. Set `PORT` environment variable if needed.
+
+3. **Kubernetes 1.24+**: Service account tokens are not auto-created. Scripts handle this automatically via `ensure-token-secret.sh`.
+
+4. **ILMT Push**: The automated push to ILMT is experimental. Test thoroughly in your environment.
 
 ## Troubleshooting
 
