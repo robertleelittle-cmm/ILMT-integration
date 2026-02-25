@@ -32,11 +32,11 @@ This project provides:
 
 ### 1. Prerequisites
 
-- Kubernetes cluster with IBM License Service Operator installed
+- Kubernetes cluster with [IBM License Service Operator](https://github.com/robertleelittle-cmm/ibm-license-service)
 - `kubectl` configured with cluster access
 - Python 3.9+ (for data transformation scripts)
 - **IBM Entitlement Key** (required for pulling IBM container images)
-- ILMT server (can be Kubernetes-based or traditional VM deployment)
+- [ILMT server](https://github.com/robertleelittle-cmm/docker-ibm-ilmt) (can be Kubernetes-based or traditional VM deployment)
 
 ### 2. Obtain IBM Entitlement Key
 
@@ -178,7 +178,7 @@ kubectl exec -n ilmt-test <pod-name> -- ls -lh /datasource
 - Server pod: `ilmt-test-server-*`
 - Database pod: `ilmt-test-db2-*`
 - Import directory: `/datasource` (persistent volume)
-- Web UI: `https://ilmt.rlittle-bamoe.kat.cmmaz.cloud:9081`
+- Web UI: `https://ilmt.<your-cluster-name>.kat.cmmaz.cloud:9081`
 
 ### Traditional VM-Based ILMT
 
@@ -209,76 +209,11 @@ ILMT_SSH_USER=root \
 
 4. **ILMT Push**: The automated push to ILMT is experimental. Test thoroughly in your environment.
 
-## Troubleshooting
-
-### License Service Reporter Operator
-
-If the `ibm-license-service-reporter-operator` pod is in `CrashLoopBackOff`:
-
-**Check Status:**
-```bash
-kubectl get pods -A | grep reporter-operator
-```
-
-**Common Issue:** Missing RBAC permissions for the operator service account.
-
-**Solution:** Create the required ClusterRole and ClusterRoleBinding:
-
-```bash
-# Create ClusterRole
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ibm-license-service-reporter-operator
-rules:
-- apiGroups: ["operator.ibm.com"]
-  resources: ["ibmlicenseservicereporters", "ibmlicenseservicereporters/status", "ibmlicenseservicereporters/finalizers"]
-  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-- apiGroups: [""]
-  resources: ["configmaps", "secrets", "services", "serviceaccounts", "persistentvolumeclaims"]
-  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-- apiGroups: ["apps"]
-  resources: ["deployments", "statefulsets"]
-  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-- apiGroups: ["networking.k8s.io"]
-  resources: ["ingresses", "networkpolicies"]
-  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-EOF
-
-# Create ClusterRoleBinding
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ibm-license-service-reporter-operator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: ibm-license-service-reporter-operator
-subjects:
-- kind: ServiceAccount
-  name: ibm-license-service-reporter-operator
-  namespace: default
-EOF
-
-# Restart the operator pod
-kubectl delete pod -n default -l control-plane=ibm-license-service-reporter-operator
-
-# Verify it's running
-kubectl get pods -n default | grep reporter-operator
-kubectl logs -n default -l control-plane=ibm-license-service-reporter-operator --tail=10
-```
-
-### ILMT Import Issues
-
-For issues with importing data to ILMT, see the detailed troubleshooting guide in `warp.md`.
+## Documentation
+- [Trouble shooting guild](/docs/TROUBLESHOOTING.md)
 
 ## References
 
 - [IBM License Service GitHub](https://github.com/IBM/ibm-licensing-operator)
-- [IBM License Service Reporter Docs](https://www.ibm.com/docs/en/cloud-paks/foundational-services/latest?topic=service-license-reporter)
-- [IBM Container Licensing Guide](https://www.ibm.com/about/software-licensing/assets/guides_pdf/Container_Licensing.pdf)
+- [IBM License Service Reporter Docs](https://www.ibm.com/docs/it/ws-and-kc?topic=license-service-reporter)
+- [IBM Container Licensing Guide](https://www.ibm.com/about/software-licensing/us-en/licensing/guides#:~:text=Virtualization%20Capacity%3A%20Container%20Licensing)
