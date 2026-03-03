@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Load shared port-forward library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/portforward.sh"
+
 # Configuration
 LICENSE_SERVICE_NAMESPACE="${LICENSE_SERVICE_NAMESPACE:-ibm-licensing}"
 LICENSE_SERVICE_NAME="${LICENSE_SERVICE_NAME:-ibm-licensing-service-instance}"
@@ -52,15 +56,10 @@ echo ""
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Get API token (use service account token for API authentication)
+# Get API token from ibm-licensing-token secret (License Service upload token)
 log_step "1/5 Retrieving API token..."
 
-# Ensure token secret exists (Kubernetes 1.24+ doesn't auto-create service account tokens)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ensure-token-secret.sh"
-ensure_token_secret
-
-TOKEN=$(kubectl get secret ibm-licensing-default-reader-token -n "$LICENSE_SERVICE_NAMESPACE" \
+TOKEN=$(kubectl get secret ibm-licensing-token -n "$LICENSE_SERVICE_NAMESPACE" \
     -o jsonpath='{.data.token}' | base64 -d | tr -d '\n')
 
 if [ -z "$TOKEN" ]; then
@@ -69,30 +68,23 @@ if [ -z "$TOKEN" ]; then
 fi
 log_info "Token retrieved successfully"
 
-# Start port-forward
+# Start port-forward with retry and health check
 log_step "2/5 Establishing connection to License Service..."
-kubectl port-forward -n "$LICENSE_SERVICE_NAMESPACE" \
-    "svc/$LICENSE_SERVICE_NAME" "$PORT:8080" &
-PF_PID=$!
-
-cleanup() {
-    kill $PF_PID 2>/dev/null || true
-}
-trap cleanup EXIT
-
-sleep 3
-log_info "Connection established"
+if ! start_port_forward "$LICENSE_SERVICE_NAMESPACE" "$LICENSE_SERVICE_NAME" "$PORT" 8080; then
+    log_error "Could not connect to License Service. See troubleshooting guide."
+    exit 2
+fi
 
 # Generate snapshot
 log_step "3/5 Generating audit snapshot..."
-curl -sk -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:$PORT/snapshot" \
+curl -sk \
+    "http://localhost:$PORT/snapshot?token=$TOKEN" \
     -o "$OUTPUT_DIR/$SNAPSHOT_NAME.zip"
 log_info "Snapshot generated: $OUTPUT_DIR/$SNAPSHOT_NAME.zip"
 
 # Get summary report
 log_step "4/5 Generating summary report..."
-PRODUCTS_JSON=$(curl -sk -H "Authorization: Bearer $TOKEN" "http://localhost:$PORT/products")
+PRODUCTS_JSON=$(curl -sk "http://localhost:$PORT/products?token=$TOKEN")
 echo "$PRODUCTS_JSON" > "$OUTPUT_DIR/$SNAPSHOT_NAME-products.json"
 
 # Create human-readable summary

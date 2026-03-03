@@ -121,6 +121,7 @@ kubectl get cronjobs -n ibm-licensing
 | `setup.sh` | Initial License Service setup | ✅ Working |
 | `ensure-token-secret.sh` | Handles K8s 1.24+ token creation | ✅ Working |
 | `generate-audit-snapshot.sh` | Creates quarterly audit snapshots | ✅ Working |
+| `lib/portforward.sh` | Shared port-forward with retry & health check | ✅ Working |
 | `export-license-data.sh` | Exports monthly license data | ⚠️ Experimental - API endpoints may vary |
 | `push-to-ilmt.sh` | Automated ILMT integration | ⚠️ Experimental - Test in your environment |
 | `start-license-reporter.sh` | Deploys Reporter component | ❌ Known issues - Operator not creating pods |
@@ -203,11 +204,13 @@ ILMT_SSH_USER=root \
 
 1. **License Service Reporter**: The Reporter operator (v4.2.19) may not create pods correctly when deployed manually. Consider using OLM or the export scripts as alternatives.
 
-2. **Port Conflicts**: Scripts use port 8090 by default to avoid conflicts. Set `PORT` environment variable if needed.
+2. **Port-Forward Transient Failures**: On clusters with spot/preemptible nodes, the port-forward may fail transiently when a pod's node was recently provisioned. Scripts retry automatically (3 attempts). Set `PF_MAX_RETRIES` to increase.
 
-3. **Kubernetes 1.24+**: Service account tokens are not auto-created. Scripts handle this automatically via `ensure-token-secret.sh`.
+3. **Port Conflicts**: Scripts use port 8090 by default to avoid conflicts. Set `PORT` environment variable if needed.
 
-4. **ILMT Push**: The automated push to ILMT is experimental. Test thoroughly in your environment.
+4. **Kubernetes 1.24+**: Service account tokens are not auto-created. Scripts handle this automatically via `ensure-token-secret.sh`.
+
+5. **ILMT Push**: The automated push to ILMT is experimental. Test thoroughly in your environment.
 
 ## Documentation
 - [Trouble shooting guild](/docs/TROUBLESHOOTING.md)

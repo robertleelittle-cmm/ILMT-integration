@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Load shared port-forward library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/portforward.sh"
+
 # Configuration
 LICENSE_SERVICE_NAMESPACE="${LICENSE_SERVICE_NAMESPACE:-ibm-licensing}"
 LICENSE_SERVICE_NAME="${LICENSE_SERVICE_NAME:-ibm-licensing-service-instance}"
@@ -32,37 +36,24 @@ log_info "Output Directory: $OUTPUT_DIR"
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Get API token (use service account token for API authentication)
+# Get API token from ibm-licensing-token secret (License Service upload token)
 log_info "Retrieving API token..."
 
-# Ensure token secret exists (Kubernetes 1.24+ doesn't auto-create service account tokens)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ensure-token-secret.sh"
-ensure_token_secret
-
-TOKEN=$(kubectl get secret ibm-licensing-default-reader-token -n "$LICENSE_SERVICE_NAMESPACE" \
+TOKEN=$(kubectl get secret ibm-licensing-token -n "$LICENSE_SERVICE_NAMESPACE" \
     -o jsonpath='{.data.token}' | base64 -d | tr -d '\n')
 
 if [ -z "$TOKEN" ]; then
-    log_error "Failed to retrieve API token"
+    log_error "Failed to retrieve API token from ibm-licensing-token secret"
+    log_error "Make sure the secret exists: kubectl get secret ibm-licensing-token -n $LICENSE_SERVICE_NAMESPACE"
     exit 1
 fi
 
-# Start port-forward in background
+# Start port-forward with retry and health check
 log_info "Starting port-forward to License Service..."
-kubectl port-forward -n "$LICENSE_SERVICE_NAMESPACE" \
-    "svc/$LICENSE_SERVICE_NAME" "$PORT:8080" &
-PF_PID=$!
-
-# Cleanup function
-cleanup() {
-    log_info "Stopping port-forward..."
-    kill $PF_PID 2>/dev/null || true
-}
-trap cleanup EXIT
-
-# Wait for port-forward to be ready
-sleep 3
+if ! start_port_forward "$LICENSE_SERVICE_NAMESPACE" "$LICENSE_SERVICE_NAME" "$PORT" 8080; then
+    log_error "Could not connect to License Service. See troubleshooting guide."
+    exit 2
+fi
 
 # Base URL - uses HTTP since HTTPS_ENABLE is false in our config
 BASE_URL="${LICENSE_SERVICE_URL:-http://localhost:$PORT}"
@@ -70,8 +61,7 @@ BASE_URL="${LICENSE_SERVICE_URL:-http://localhost:$PORT}"
 # Export products data
 log_info "Exporting products data..."
 if ! curl -sSfk \
-    -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/products" \
+    "$BASE_URL/products?token=$TOKEN" \
     -o "$OUTPUT_DIR/products-$MONTH.json"; then
     log_error "Failed to export products data. Check if License Service is running and accessible."
     exit 1
@@ -80,8 +70,7 @@ fi
 # Export audit snapshot
 log_info "Exporting audit snapshot..."
 if ! curl -sSfk \
-    -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/snapshot" \
+    "$BASE_URL/snapshot?token=$TOKEN" \
     -o "$OUTPUT_DIR/audit-snapshot-$MONTH.zip"; then
     log_error "Failed to export audit snapshot"
     exit 1
@@ -90,18 +79,15 @@ fi
 # Export bundled products (may not exist in all versions)
 log_info "Exporting bundled products..."
 curl -sSfk \
-    -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/bundled_products" \
+    "$BASE_URL/bundled_products?token=$TOKEN" \
     -o "$OUTPUT_DIR/bundled-products-$MONTH.json" 2>/dev/null || log_warn "No bundled products data available"
 
-# Export product metrics summary
-log_info "Exporting product metrics..."
+# Export status page (provides real-time product tracking info)
+log_info "Exporting status data..."
 if ! curl -sSfk \
-    -H "Authorization: Bearer $TOKEN" \
-    "$BASE_URL/products" \
-    -o "$OUTPUT_DIR/all-products.json"; then
-    log_error "Failed to export product metrics"
-    exit 1
+    "$BASE_URL/status?token=$TOKEN" \
+    -o "$OUTPUT_DIR/status-$MONTH.html"; then
+    log_warn "Failed to export status data"
 fi
 
 log_info "Export complete!"

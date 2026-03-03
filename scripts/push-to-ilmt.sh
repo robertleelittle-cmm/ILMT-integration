@@ -14,6 +14,9 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
+# Load shared port-forward library
+source "$SCRIPT_DIR/lib/portforward.sh"
+
 # =============================================================================
 # CONFIGURATION - Edit these variables for your environment
 # =============================================================================
@@ -92,12 +95,9 @@ check_dependencies() {
 get_api_token() {
     log "Retrieving License Service API token..." >&2
     
-    # Ensure token secret exists (Kubernetes 1.24+ doesn't auto-create service account tokens)
-    "$SCRIPT_DIR/ensure-token-secret.sh" >&2
-    
-    # Use the service account token for API authentication
+    # Use the ibm-licensing-token secret (License Service upload token)
     local encoded
-    encoded=$(kubectl get secret ibm-licensing-default-reader-token \
+    encoded=$(kubectl get secret ibm-licensing-token \
         -n "$LICENSE_SERVICE_NAMESPACE" \
         -o jsonpath='{.data.token}')
     # base64 -d works on modern macOS/Linux, -D is legacy macOS
@@ -114,42 +114,38 @@ export_license_data() {
     local token
     token=$(get_api_token)
     
-    # Port forward to License Service
+    # Port forward to License Service with retry and health check
     log "Setting up port-forward to License Service..."
-    kubectl port-forward -n "$LICENSE_SERVICE_NAMESPACE" \
-        svc/ibm-licensing-service-instance "$PORT:8080" &
-    local pf_pid=$!
-    sleep 3
+    if ! start_port_forward "$LICENSE_SERVICE_NAMESPACE" "ibm-licensing-service-instance" "$PORT" 8080; then
+        error "Could not connect to License Service. See troubleshooting guide."
+    fi
     
     # Export products data
     log "Exporting products data..."
-    curl -s -H "Authorization: Bearer $token" \
-        "${LICENSE_SERVICE_URL}/products?month=${month}" \
+    curl -s \
+        "${LICENSE_SERVICE_URL}/products?token=${token}&month=${month}" \
         -o "${output_dir}/products-${month}.json" || {
-        kill $pf_pid 2>/dev/null
         error "Failed to export products data"
     }
     
     # Export audit snapshot
     log "Exporting audit snapshot..."
-    curl -s -H "Authorization: Bearer $token" \
-        "${LICENSE_SERVICE_URL}/snapshot?month=${month}" \
+    curl -s \
+        "${LICENSE_SERVICE_URL}/snapshot?token=${token}&month=${month}" \
         -o "${output_dir}/audit-snapshot-${month}.zip" || {
-        kill $pf_pid 2>/dev/null
         error "Failed to export audit snapshot"
     }
     
     # Export bundled products
     log "Exporting bundled products..."
-    curl -s -H "Authorization: Bearer $token" \
-        "${LICENSE_SERVICE_URL}/bundled_products?month=${month}" \
+    curl -s \
+        "${LICENSE_SERVICE_URL}/bundled_products?token=${token}&month=${month}" \
         -o "${output_dir}/bundled-products-${month}.json" || {
-        kill $pf_pid 2>/dev/null
         error "Failed to export bundled products"
     }
     
-    # Clean up port-forward
-    kill $pf_pid 2>/dev/null
+    # Clean up port-forward (managed by library trap)
+    _pf_cleanup
     
     log "Export complete: $output_dir"
 }

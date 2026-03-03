@@ -31,6 +31,8 @@ ilmt-integration/
 │   ├── reporter/           # License Service Reporter manifests
 │   └── cronjobs/           # Automated reporting CronJobs
 ├── scripts/
+│   ├── lib/
+│   │   └── portforward.sh       # Shared port-forward with retry logic
 │   ├── setup.sh                 # Initial setup script
 │   ├── ensure-token-secret.sh   # Token management for K8s 1.24+
 │   ├── export-license-data.sh   # Export license data
@@ -247,8 +249,22 @@ PORT=8091 ./scripts/generate-audit-snapshot.sh
 PORT=8091 ./scripts/push-to-ilmt.sh
 ```
 
-### Port-Forward Status
-The export scripts use `kubectl port-forward` to access the License Service API. The port-forward is automatically created and terminated by the script. To check for stuck port-forwards:
+### Port-Forward Reliability
+
+All scripts that access the License Service API use `kubectl port-forward` via a shared library (`scripts/lib/portforward.sh`) that provides:
+- **Automatic retry** (3 attempts by default) with configurable delay
+- **Health check verification** — confirms the port is reachable before proceeding
+- **Diagnostic logging** — captures and reports port-forward stderr on failure
+- **Automatic cleanup** — kills the background process on script exit
+
+**Known issue**: On clusters using **spot/preemptible nodes** (e.g., AKS spot node pools), a newly provisioned node may not be reachable via the API server tunnel for the first 1-2 minutes. The retry logic handles this automatically.
+
+To tune retry behaviour:
+```bash
+PF_MAX_RETRIES=5 PF_RETRY_DELAY=10 PF_HEALTH_TIMEOUT=20 ./scripts/generate-audit-snapshot.sh
+```
+
+To check for stuck port-forwards:
 ```bash
 # Check for running port-forwards
 ps aux | grep 'kubectl port-forward' | grep -v grep
